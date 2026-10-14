@@ -135,6 +135,39 @@ td:first-child{font-weight:600}
 .tab[aria-current="page"]{color:var(--accent)}
 .foot{font-size:13px;color:var(--muted)}
 .refs li{font-size:14px}
+.fig{cursor:zoom-in}
+.figbtn{flex:none;border:0;background:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:4px}
+.figbtn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* Visionneuse plein écran */
+.viewer{position:fixed;inset:0;z-index:30;background:var(--surface);display:flex;flex-direction:column}
+.viewer-bar{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding-top:max(8px,env(safe-area-inset-top,0px));padding-bottom:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.viewer-bar b{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vbtn{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:8px;min-width:40px;height:36px;padding:0 10px;font-size:15px;cursor:pointer;flex:none}
+.vbtn.close{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.viewer-hint{font-size:13px;color:var(--muted);text-align:center;padding:8px 16px 0}
+.viewer-body{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;padding-top:12px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+.viewer-body svg{display:block;margin:auto;height:auto;flex:none;font-family:var(--font-body)}
+@media (orientation:landscape){.viewer-hint{display:none}}
+body.noscroll{overflow:hidden}
+/* Tablette et écran large : deux colonnes, texte à gauche, schémas à droite */
+.figref{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:var(--accent-soft);border:0;border-radius:10px;padding:10px 12px;font-size:14px;color:var(--fg);cursor:pointer}
+.figref::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.figref span{flex:1;min-width:0}
+.figref em{font-style:normal;color:var(--accent);font-weight:600;flex:none}
+@media (min-width:1000px){
+  .topbar-in,.tabbar-in{max-width:1240px}
+  .wrap.split{max-width:1240px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:32px;align-items:start}
+  .col-text{display:flex;flex-direction:column;gap:20px;min-width:0}
+  .col-fig{position:sticky;top:calc(env(safe-area-inset-top,0px) + 68px);max-height:calc(100vh - 68px - 92px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overflow-y:auto;display:flex;flex-direction:column;gap:16px;min-width:0;padding:2px 2px 8px;scroll-behavior:smooth}
+  .col-fig > *{flex:none}
+  .col-fig .fig-scroll svg{min-width:0}
+  .col-fig .fig{transition:border-color .2s,box-shadow .2s}
+  .col-fig .fig.active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .col-fig .swipe{display:none}
+  .wrap.wide{max-width:1240px}
+  .wide .gallery{grid-template-columns:1fr 1fr}
+  .wide .clist{display:grid;grid-template-columns:1fr 1fr}
+}
 @media (prefers-reduced-motion:no-preference){.view{animation:fade .18s ease-out}}
 @keyframes fade{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
 </style>
@@ -161,7 +194,8 @@ const FIG_CAPTION = {
   points14:"Plan en 14 points", convalescence:"Chronologie de convalescence", baker:"Classification de Baker",
   rupture:"Formes de rupture", malpositions:"Malpositions", serome:"Sérome tardif : arbre décisionnel", lagc:"Stades T du LAGC-AIM"
 };
-const fig = k => `<figure class="fig" style="margin:0"><div class="fig-scroll">${SVG[k]||''}</div><figcaption><span>${FIG_CAPTION[k]}</span><span class="swipe">← faire glisser →</span></figcaption></figure>`;
+const EXPAND = `<svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`;
+const fig = k => `<figure class="fig" data-key="${k}" style="margin:0"><div class="fig-scroll">${SVG[k]||''}</div><figcaption><span>${FIG_CAPTION[k]}</span><button class="figbtn" type="button" data-open="${k}">${EXPAND}Agrandir</button></figcaption></figure>`;
 const call = (kind, title, html) => `<div class="callout ${kind}"><strong>${title}</strong>${html}</div>`;
 const ul = items => `<ul class="list">${items.map(i=>`<li>${i}</li>`).join('')}</ul>`;
 const table = (head, rows) => `<div class="tbl"><table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
@@ -490,8 +524,88 @@ function render(){
   $back.hidden = !back;
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-current', b.dataset.go===tab ? 'page' : 'false'));
   restoreChecks();
+  layout(h);
   window.scrollTo(0,0);
 }
+
+/* Mise en page deux colonnes sur grand écran */
+const WIDE = window.matchMedia('(min-width:1000px)');
+let figObserver = null;
+function layout(h){
+  if(figObserver){ figObserver.disconnect(); figObserver = null; }
+  $view.classList.remove('split','wide');
+  const isDetail = h.startsWith('etape-') || h.startsWith('c-');
+  if(!WIDE.matches) return;
+  if(h==='schemas' || h==='complications'){ $view.classList.add('wide'); return; }
+  const figs = [...$view.querySelectorAll('.fig')];
+  if(!isDetail || !figs.length) return;
+  const colText = document.createElement('div'); colText.className = 'col-text';
+  const colFig = document.createElement('aside'); colFig.className = 'col-fig'; colFig.setAttribute('aria-label','Schémas de la page');
+  while($view.firstChild) colText.appendChild($view.firstChild);
+  figs.forEach(f=>{
+    const ref = document.createElement('button');
+    ref.type = 'button'; ref.className = 'figref'; ref.dataset.ref = f.dataset.key;
+    ref.innerHTML = `<span>Schéma : ${FIG_CAPTION[f.dataset.key]}</span><em>→</em>`;
+    f.replaceWith(ref);
+    colFig.appendChild(f);
+  });
+  $view.append(colText, colFig);
+  $view.classList.add('split');
+  const setActive = key => {
+    colFig.querySelectorAll('.fig').forEach(f=>f.classList.toggle('active', f.dataset.key===key));
+    const f = colFig.querySelector(`.fig[data-key="${key}"]`);
+    if(f) colFig.scrollTo({top: f.offsetTop - 2});
+  };
+  setActive(figs[0].dataset.key);
+  figObserver = new IntersectionObserver(entries=>{
+    const vis = entries.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);
+    if(vis.length) setActive(vis[0].target.dataset.ref);
+  }, {rootMargin:'-25% 0px -45% 0px'});
+  colText.querySelectorAll('.figref').forEach(r=>figObserver.observe(r));
+}
+WIDE.addEventListener ? WIDE.addEventListener('change', render) : WIDE.addListener(render);
+
+/* Visionneuse plein écran */
+let viewer = null, zoom = 1, viewerKey = null;
+function openViewer(key){
+  closeViewer();
+  viewerKey = key; zoom = 1;
+  viewer = document.createElement('div');
+  viewer.className = 'viewer'; viewer.setAttribute('role','dialog'); viewer.setAttribute('aria-modal','true');
+  viewer.setAttribute('aria-label', FIG_CAPTION[key]);
+  viewer.innerHTML = `<div class="viewer-bar"><b>${FIG_CAPTION[key]}</b>
+    <button class="vbtn" type="button" data-zoom="-1" aria-label="Réduire">−</button>
+    <button class="vbtn" type="button" data-zoom="1" aria-label="Agrandir">+</button>
+    <button class="vbtn close" type="button" data-close aria-label="Fermer">Fermer</button></div>
+    <p class="viewer-hint">Tournez l'iPhone à l'horizontale pour voir le schéma en entier.</p>
+    <div class="viewer-body">${SVG[key]}</div>`;
+  document.body.appendChild(viewer);
+  document.body.classList.add('noscroll');
+  sizeViewer();
+  viewer.querySelector('[data-close]').focus();
+}
+function sizeViewer(){
+  if(!viewer) return;
+  const svg = viewer.querySelector('.viewer-body svg');
+  const body = viewer.querySelector('.viewer-body');
+  const vb = svg.viewBox.baseVal, ratio = vb.width / vb.height;
+  const availW = body.clientWidth - 24, availH = body.clientHeight - 24;
+  let fit = Math.min(availW, availH * ratio);
+  const phonePortrait = window.innerWidth < 600;
+  viewer.querySelector('.viewer-hint').hidden = !phonePortrait;
+  if(phonePortrait) fit = Math.max(fit, 700);   // iPhone en portrait : lisible, défilement horizontal
+  svg.style.width = Math.round(fit * zoom) + 'px';
+  viewer.querySelector('[data-zoom="-1"]').disabled = zoom <= 1;
+  viewer.querySelector('[data-zoom="1"]').disabled = zoom >= 3;
+}
+function closeViewer(){
+  if(!viewer) return;
+  viewer.remove(); viewer = null;
+  document.body.classList.remove('noscroll');
+}
+window.addEventListener('resize', sizeViewer);
+window.addEventListener('orientationchange', ()=>setTimeout(sizeViewer, 200));
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeViewer(); });
 function navigate(id){ if(('#'+id)===location.hash) render(); else location.hash = id; }
 
 function restoreChecks(){
@@ -508,6 +622,16 @@ function updateCount(box){
 }
 
 document.addEventListener('click', e=>{
+  if(viewer){
+    if(e.target.closest('[data-close]')){ closeViewer(); return; }
+    const z = e.target.closest('[data-zoom]');
+    if(z){ zoom = Math.min(3, Math.max(1, zoom + (z.dataset.zoom==='1' ? 0.5 : -0.5))); sizeViewer(); }
+    return;
+  }
+  const o = e.target.closest('[data-open]') || e.target.closest('.fig');
+  if(o){ openViewer(o.dataset.open || o.dataset.key); return; }
+  const fr = e.target.closest('.figref');
+  if(fr){ openViewer(fr.dataset.ref); return; }
   const g = e.target.closest('[data-go]');
   if(g){ e.preventDefault(); navigate(g.dataset.go); return; }
   const l = e.target.closest('a[data-link]');
@@ -528,7 +652,7 @@ document.addEventListener('input', e=>{
   box.innerHTML = e.target.value.trim().length<2 ? '' : (res.length ? res.map(r=>`<button class="res" data-go="${r.go}">${r.t}<small>${r.k}</small></button>`).join('') : `<p class="foot">Aucun résultat. Essayer un autre terme : coque, rupture, sillon…</p>`);
 });
 $back.addEventListener('click', ()=>{ const h = (location.hash||'').slice(1); navigate(h.startsWith('c-') ? 'complications' : 'accueil'); });
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', ()=>{ closeViewer(); render(); });
 render();
 </script>
 
